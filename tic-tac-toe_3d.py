@@ -2,11 +2,12 @@
 from ursina import *
 
 class TicTacToe3D:
-    def __init__(self):
-        """Initialize game variables and create the 3D board."""
+    def __init__(self, size=3):
+        """Initialize the game with a configurable board size."""
+        self.size = size
         self.current_player = 1  # 1 for Player 1, 2 for Player 2
         self.game_over = False
-        self.board = [[[0 for _ in range(3)] for _ in range(3)] for _ in range(3)]
+        self.board = [[[0 for _ in range(size)] for _ in range(size)] for _ in range(size)]
         self.cells = {}  # Mapping (i, j, k) -> cell entity
         self.create_board()
         self.define_winning_lines()
@@ -14,9 +15,9 @@ class TicTacToe3D:
     def create_board(self):
         """Creates the 3D grid and clickable cells."""
         offset = Vec3(-1, -1, -1)
-        for i in range(3):
-            for j in range(3):
-                for k in range(3):
+        for i in range(self.size):
+            for j in range(self.size):
+                for k in range(self.size):
                     pos = Vec3(i, j, k) + offset
                     cell = Button(
                         parent=scene,
@@ -30,62 +31,61 @@ class TicTacToe3D:
                     self.cells[(i, j, k)] = cell
 
     def define_winning_lines(self):
-        """Defines all possible winning lines in a 3x3x3 grid."""
+        """Defines all possible winning lines in the NxNxN grid."""
         self.winning_lines = []
 
         # Rows along x-axis
-        for j in range(3):
-            for k in range(3):
-                self.winning_lines.append([(0, j, k), (1, j, k), (2, j, k)])
-        
-        # Rows along y-axis
-        for i in range(3):
-            for k in range(3):
-                self.winning_lines.append([(i, 0, k), (i, 1, k), (i, 2, k)])
-        
-        # Rows along z-axis
-        for i in range(3):
-            for j in range(3):
-                self.winning_lines.append([(i, j, 0), (i, j, 1), (i, j, 2)])
-        
-        # Diagonal lines in xy planes
-        for k in range(3):
-            self.winning_lines.append([(0, 0, k), (1, 1, k), (2, 2, k)])
-            self.winning_lines.append([(0, 2, k), (1, 1, k), (2, 0, k)])
-        
-        # Diagonal lines in xz planes
-        for j in range(3):
-            self.winning_lines.append([(0, j, 0), (1, j, 1), (2, j, 2)])
-            self.winning_lines.append([(0, j, 2), (1, j, 1), (2, j, 0)])
-        
-        # Diagonal lines in yz planes
-        for i in range(3):
-            self.winning_lines.append([(i, 0, 0), (i, 1, 1), (i, 2, 2)])
-            self.winning_lines.append([(i, 0, 2), (i, 1, 1), (i, 2, 0)])
-        
-        # 3D diagonal lines
-        self.winning_lines.append([(0, 0, 0), (1, 1, 1), (2, 2, 2)])
-        self.winning_lines.append([(0, 0, 2), (1, 1, 1), (2, 2, 0)])
-        self.winning_lines.append([(0, 2, 0), (1, 1, 1), (2, 0, 2)])
-        self.winning_lines.append([(0, 2, 2), (1, 1, 1), (2, 0, 0)])
+        for j in range(self.size):
+            for k in range(self.size):
+                self.winning_lines.append([(i, j, k) for i in range(self.size)])
 
-    def check_winner(self):
-        """Checks if a player has won the game."""
+        # Rows along y-axis
+        for i in range(self.size):
+            for k in range(self.size):
+                self.winning_lines.append([(i, j, k) for j in range(self.size)])
+
+        # Rows along z-axis
+        for i in range(self.size):
+            for j in range(self.size):
+                self.winning_lines.append([(i, j, k) for k in range(self.size)])
+
+        # Diagonal lines in xy planes
+        for k in range(self.size):
+            self.winning_lines.append([(i, i, k) for i in range(self.size)])
+            self.winning_lines.append([(i, self.size - 1 - i, k) for i in range(self.size)])
+
+        # Diagonal lines in xz planes
+        for j in range(self.size):
+            self.winning_lines.append([(i, j, i) for i in range(self.size)])
+            self.winning_lines.append([(i, j, self.size - 1 - i) for i in range(self.size)])
+
+        # Diagonal lines in yz planes
+        for i in range(self.size):
+            self.winning_lines.append([(i, i, i) for i in range(self.size)])
+            self.winning_lines.append([(i, i, self.size - 1 - i) for i in range(self.size)])
+
+        # 3D diagonal lines
+        self.winning_lines.append([(i, i, i) for i in range(self.size)])
+        self.winning_lines.append([(i, i, self.size - 1 - i) for i in range(self.size)])
+        self.winning_lines.append([(i, self.size - 1 - i, i) for i in range(self.size)])
+        self.winning_lines.append([(i, self.size - 1 - i, self.size - 1 - i) for i in range(self.size)])
+
+    def check_winner_optimized(self, i, j, k):
+        """Optimized check for a winner by verifying only affected lines."""
         for line in self.winning_lines:
-            a, b, c = line
-            if self.board[a[0]][a[1]][a[2]] != 0 and \
-               self.board[a[0]][a[1]][a[2]] == self.board[b[0]][b[1]][b[2]] == self.board[c[0]][c[1]][c[2]]:
-                return self.board[a[0]][a[1]][a[2]]
+            if (i, j, k) in line:
+                if all(self.board[x][y][z] == self.current_player for x, y, z in line):
+                    return self.current_player
 
         # Check for a draw (if no empty spaces left)
-        if all(self.board[i][j][k] != 0 for i in range(3) for j in range(3) for k in range(3)):
+        if all(self.board[i][j][k] != 0 for i in range(self.size) for j in range(self.size) for k in range(self.size)):
             print("It's a draw!")
             self.game_over = True
             return -1  # Indicates a draw
         return 0  # No winner yet
 
     def draw_marker(self, i, j, k):
-        """Draws the symbol for the current player at (i, j, k)."""
+        """Draws the marker for the current player at (i, j, k)."""
         pos = self.cells[(i, j, k)].world_position
         if self.current_player == 1:
             Entity(model='cube', color=color.red, scale=(0.7, 0.1, 0.1), position=pos, rotation=Vec3(0,0,45))
@@ -93,10 +93,22 @@ class TicTacToe3D:
         else:
             Entity(model='sphere', color=color.blue, scale=0.4, position=pos)
 
+    def highlight_winning_cells(self, winner):
+        """Highlights the cells in the winning line."""
+        for line in self.winning_lines:
+            if all(self.board[x][y][z] == winner for x, y, z in line):
+                for cell_pos in line:
+                    self.cells[cell_pos].color = color.yellow  # Highlight the winning line
+
     def handle_input(self, key):
         """Handles user input and updates the game state."""
+        if self.game_over and key == 'r':  # Press 'r' to reset the game
+            self.reset_game()
+            return
+
         if self.game_over:
             return
+
         if key == 'left mouse down' and mouse.hovered_entity:
             for coord, cell in self.cells.items():
                 if cell == mouse.hovered_entity:
@@ -104,15 +116,27 @@ class TicTacToe3D:
                     if self.board[i][j][k] == 0:
                         self.board[i][j][k] = self.current_player
                         self.draw_marker(i, j, k)
-                        winner = self.check_winner()
+                        winner = self.check_winner_optimized(i, j, k)
+
                         if winner > 0:
                             print(f"Player {winner} wins!")
+                            self.highlight_winning_cells(winner)
                             self.game_over = True
                         elif winner == -1:
                             print("It's a draw!")  # Game ends in a draw
                         else:
                             self.current_player = 2 if self.current_player == 1 else 1
                     break
+
+    def reset_game(self):
+        """Resets the game for a new round."""
+        self.current_player = 1
+        self.game_over = False
+        self.board = [[[0 for _ in range(self.size)] for _ in range(self.size)] for _ in range(self.size)]
+
+        # Reset cell colors
+        for cell in self.cells.values():
+            cell.color = color.white
 
 # Initialize the game
 app = Ursina()
